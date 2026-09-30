@@ -1,0 +1,12 @@
+*
+!Cargo.toml
+!Cargo.lock
+!rust-toolchain.toml
+!Makefile
+!.cargo
+!.github
+!scripts
+!src
+!crates
+**/target
+**/__pycache__

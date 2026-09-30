@@ -1,0 +1,40 @@
+name: CI
+on:
+    push: { branches: [main] }
+    pull_request:
+    workflow_dispatch:
+permissions:
+    contents: read
+
+jobs:
+    test:
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 60
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-24.04, ubuntu-24.04-arm]
+                profile: [debug, release]
+        env:
+            RUST_BACKTRACE: "1"
+            RAPIRA_REQUIRE_EXTS: openssl
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with: { persist-credentials: false }
+            - uses: ./.github/actions/php-async
+              with: { profile: "${{ matrix.profile }}" }
+            - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+              with: { components: clippy }
+            - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+              with:
+                  cache-on-failure: true
+                  key: php-async-${{ matrix.profile }}-${{ hashFiles('.github/php-async.env', '.github/php-configure-flags.txt') }}
+            - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+            - run: cargo clippy -p tests --features e2e --tests --locked -- -D warnings
+            - name: Master stays tokio-free
+              run: |
+                  deps=$(cargo tree -p rapira_master --prefix none)
+                  if echo "$deps" | grep -q '^tokio '; then
+                      echo '::error::rapira_master must not depend on tokio'; exit 1
+                  fi
+            - run: make test

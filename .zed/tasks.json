@@ -1,0 +1,38 @@
+[
+    {
+        "label": "rapira-async: rebuild PHP debug",
+        "command": "make",
+        "args": ["build-php-debug"],
+        "cwd": "$ZED_WORKTREE_ROOT"
+    },
+    {
+        "label": "rapira-async: rebuild PHP release",
+        "command": "make",
+        "args": ["build-php-release"],
+        "cwd": "$ZED_WORKTREE_ROOT"
+    },
+    {
+        "label": "rapira-async: build debug",
+        "command": "make",
+        "args": ["build-debug"],
+        "cwd": "$ZED_WORKTREE_ROOT"
+    },
+    {
+        "label": "rapira-async: build release",
+        "command": "make",
+        "args": ["build-release"],
+        "cwd": "$ZED_WORKTREE_ROOT"
+    },
+    {
+        "label": "rapira-async: test",
+        "command": "make",
+        "args": ["test"],
+        "cwd": "$ZED_WORKTREE_ROOT"
+    },
+    {
+        "label": "rapira-async: run PHP file",
+        "command": "$ZED_WORKTREE_ROOT/target/php-async/bin/php",
+        "args": ["$ZED_FILE"],
+        "cwd": "$ZED_WORKTREE_ROOT"
+    }
+]

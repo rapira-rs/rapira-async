@@ -1,0 +1,113 @@
+name: Nightly
+on:
+    workflow_run:
+        workflows: [CI]
+        types: [completed]
+        branches: [main]
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+# concurrency is decided before any job `if`, so ineligible runs must not share the publishing group or they cancel an in-flight publish; the predicate mirrors the guard job's `if`.
+concurrency:
+    group: nightly-${{ ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')) && 'publish' || github.run_id }}
+    cancel-in-progress: true
+
+jobs:
+    guard:
+        # the branches filter alone also admits CI runs of fork PRs whose branch is named main, so the run must additionally come from a push event
+        if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        outputs:
+            version: ${{ steps.v.outputs.version }}
+            sha: ${{ steps.v.outputs.sha }}
+            release_commit: ${{ steps.v.outputs.release_commit }}
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+                  persist-credentials: false
+            - id: v
+              env:
+                  SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  set -euo pipefail
+                  CARGO_VER=$(jq -er '.["."]' .release-please-manifest.json)
+                  echo "version=${CARGO_VER}-nightly.${SHA:0:7}" >> "$GITHUB_OUTPUT"
+                  echo "sha=${SHA}" >> "$GITHUB_OUTPUT"
+                  # The binaries job skips a commit that already carries a release tag:
+                  # release-please.yml builds it. The docker jobs still run. The tag
+                  # for a release commit is v<manifest version>; an absent tag or an
+                  # API error counts as not a release commit.
+                  TAGGED=$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v${CARGO_VER}" --jq '.object.sha' 2>/dev/null || true)
+                  if [ "$TAGGED" = "$SHA" ]; then
+                      echo "release_commit=true" >> "$GITHUB_OUTPUT"
+                  fi
+
+    # Each image tag uses the php-async suffix from docker.yml.
+    images:
+        needs: guard
+        permissions:
+            contents: read
+            packages: write
+        uses: ./.github/workflows/docker.yml
+        with:
+            ref: ${{ needs.guard.outputs.sha }}
+            version: ${{ needs.guard.outputs.version }}
+            alias: nightly
+
+    cleanup:
+        needs: [guard, images]
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        permissions:
+            contents: read
+            packages: write
+        env:
+            GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            V: ${{ needs.guard.outputs.version }}
+            KEEP: "10"
+        steps:
+            - shell: bash
+              run: |
+                  set -euo pipefail
+                  API="/orgs/${GITHUB_REPOSITORY%%/*}/packages/container/${GITHUB_REPOSITORY#*/}/versions"
+
+                  # tagged nightly versions only: untagged versions hold multi-arch children and attestations and must never be deleted
+                  gh api --paginate "${API}?per_page=100" --jq '
+                    .[]
+                    | .metadata.container.tags as $t
+                    | select(($t | length) > 0)
+                    | select([$t[] | test("-nightly\\.[0-9a-f]+-php|^nightly-php")] | all)
+                    | (([$t[] | capture("^(?<b>.*-nightly\\.[0-9a-f]+)-php")? | .b] | first) // empty) as $build
+                    | [$build, .created_at, .id] | @tsv
+                  ' > candidates.tsv
+
+                  # self-check: the build this run just pushed must be selected, otherwise the filter no longer matches what merge publishes
+                  awk -F'\t' -v v="$V" '$1 == v { found = 1 } END { exit !found }' candidates.tsv
+
+                  keep=$(sort -t$'\t' -k2,2r candidates.tsv | awk -F'\t' -v k="$KEEP" '!seen[$1]++ { if (++n <= k) print $1 }')
+
+                  while IFS=$'\t' read -r build created id; do
+                      grep -qxF "$build" <<< "$keep" && continue
+                      gh api --silent -X DELETE "${API}/${id}" || { echo "::warning::failed to delete ${id} (${build})"; continue; }
+                      echo "deleted ${id} (${build}, ${created})"
+                  done < candidates.tsv
+
+    # Independent of the docker chain: a failed native build does not block the
+    # docker nightlies, and the reverse holds.
+    binaries:
+        needs: guard
+        if: needs.guard.outputs.release_commit != 'true'
+        permissions:
+            contents: write
+        uses: ./.github/workflows/build-binaries.yml
+        with:
+            ref: ${{ needs.guard.outputs.sha }}
+            version: ${{ needs.guard.outputs.version }}
+            packages: false
+            upload_to: nightly
+            rolling: true

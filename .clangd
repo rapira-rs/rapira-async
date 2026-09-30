@@ -1,0 +1,9 @@
+# make build-debug / build-release writes absolute paths to the selected PR build.
+CompileFlags:
+    CompilationDatabase: target/clangd
+---
+If:
+    PathMatch: .*_arginfo\.h
+Diagnostics:
+    ClangTidy:
+        Remove: readability-implicit-bool-conversion

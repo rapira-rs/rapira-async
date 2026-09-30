@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+CONFIG="$ROOT/target/php-async/bin/php-config"
+if [ ! -x "$CONFIG" ]; then
+    echo 'Async PHP is not built. Run make build-php-debug or make build-php-release.' >&2
+    exit 1
+fi
+exec "$CONFIG" "$@"

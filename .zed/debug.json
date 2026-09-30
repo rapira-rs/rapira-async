@@ -1,0 +1,31 @@
+[
+    {
+        "label": "rapira-async: debug PHP and server",
+        "adapter": "CodeLLDB",
+        "request": "launch",
+        "program": "$ZED_WORKTREE_ROOT/target/debug/rapira",
+        "build": { "command": "make", "args": ["build-debug"] },
+        "args": ["serve", ".zed/rapira.toml"],
+        "cwd": "$ZED_WORKTREE_ROOT",
+        "env": {
+            "LD_LIBRARY_PATH": "$ZED_WORKTREE_ROOT/target/php-async/lib",
+            "RUST_LOG": "info"
+        },
+        "sourceLanguages": ["rust", "c"]
+    },
+    {
+        "label": "rapira-async: follow PHP worker",
+        "adapter": "CodeLLDB",
+        "request": "launch",
+        "program": "$ZED_WORKTREE_ROOT/target/debug/rapira",
+        "build": { "command": "make", "args": ["build-debug"] },
+        "args": ["serve", ".zed/rapira.toml"],
+        "cwd": "$ZED_WORKTREE_ROOT",
+        "env": {
+            "LD_LIBRARY_PATH": "$ZED_WORKTREE_ROOT/target/php-async/lib",
+            "RUST_LOG": "info"
+        },
+        "initCommands": ["settings set target.process.follow-fork-mode child"],
+        "sourceLanguages": ["rust", "c"]
+    }
+]

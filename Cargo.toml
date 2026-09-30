@@ -1,0 +1,81 @@
+[workspace.package]
+edition = "2024"
+
+[package]
+name = "rapira_core"
+version = "0.8.1"
+edition.workspace = true
+description = "PHP application server: embeds NTS PHP via the embed SAPI and serves HTTP directly"
+homepage = "https://rapira.rs"
+documentation = "https://rapira.rs/docs/"
+repository = "https://github.com/rapira-rs/rapira-async"
+license = "MIT"
+readme = "README.md"
+
+[[bin]]
+name = "rapira"
+path = "src/main.rs"
+
+
+[workspace]
+members = [
+    "crates/config",
+    "crates/tests",
+    "crates/master",
+    "crates/observability",
+    "crates/php_build",
+    "crates/middleware/static_files",
+    "crates/sapi",
+    "crates/scoreboard",
+    "crates/net",
+    "crates/plugins/http",
+]
+
+[workspace.dependencies]
+anyhow = "1"
+base64 = "0.22"
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+rapira_sapi = { path = "crates/sapi" }
+rapira_php_build = { path = "crates/php_build" }
+rapira_config = { path = "crates/config" }
+rapira_static_files = { path = "crates/middleware/static_files" }
+rapira_http = { path = "crates/plugins/http" }
+rapira_net = { path = "crates/net" }
+rapira_master = { path = "crates/master" }
+rapira_observability = { path = "crates/observability" }
+rapira_scoreboard = { path = "crates/scoreboard" }
+serde = { version = "1", features = ["derive"] }
+toml = "1.1"
+tokio = { version = "1", features = ["sync"] }
+bytes = "1"
+http = "1"
+http-body-util = "0.1"
+hyper = "1"
+hyper-util = "0.1"
+tower = { version = "0.5", features = ["util"] }
+libc = "0.2"
+
+[workspace.lints.clippy]
+all = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+rapira_master = { workspace = true }
+rapira_net = { workspace = true }
+rapira_sapi = { workspace = true }
+rapira_config = { workspace = true }
+rapira_http = { workspace = true }
+rapira_observability = { workspace = true }
+rapira_scoreboard = { workspace = true }
+libc = { workspace = true }
+mimalloc = "0.1"
+serde = { workspace = true }
+tokio = { workspace = true }
+toml = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "chrono", "json"] }

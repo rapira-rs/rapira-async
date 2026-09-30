@@ -1,0 +1,56 @@
+## Settled, do not reopen
+
+- NTS only, `rapira_sapi.h` rejects ZTS headers at compile time. Linux only. PHP comes from PR #23997, pinned in `.github/php-async.env`.
+- One interpreter per forked worker. Master is single-threaded, no tokio; workers inherit listener fds.
+- MINIT runs once in the master pre-fork so opcache SHM is inherited. Workers exit rather than tear the module down.
+- Foreground only, no daemonize. Pidfile stays.
+- Allocator is mimalloc v3, without THP.
+- New host logic in Rust via ZEND_API if that is reasonable. C only for ZPP shells, longjmp isolation, macro shims.
+- Pre 1.0 - do not preserve backwards compatibility.
+
+## PHP contract
+
+- The PHP contract ([rapira-rs/contract](https://github.com/rapira-rs/contract), local checkout `../contract`; update it before you read it) comes first. Read it before you plan, design or change anything that PHP can see: stubs, classes, functions, exceptions, messages and behavior.
+- The extension follows the contract. To improve the contract or deviate from it, ask first.
+
+## All text
+
+These rules apply to all text, such as comments and docs.
+
+- Write all English in ASD-STE100 Simplified Technical English (STE). Use short sentences, active voice, approved vocabulary, and one instruction per sentence. Avoid idioms, slang, and unnecessary synonyms. Do not write poems in the code comments.
+- Mannered prose substitutes metaphor and flourish for direct statement. Instead of "a parameter worth varying," the mannered writer produces "a dial worth turning." Instead of "this point still matters," they write "this point earns its keep." The phrases exist to display the writer, not to convey the idea, and readers can tell. That is why mannered prose irritates: it makes the reader work harder so the writer can perform. It is also imprecise. Metaphors drag in connotations the writer did not choose and cannot control. The fix is to say what you mean. When a literal phrase is available, use it.
+
+## Comments
+
+- `make stubs` generates each `*_arginfo.h` header under `crates/` from the `*.stub.php` next to it.
+
+## Tests
+
+- A test proves a behavior from outside, through what a client or an operator sees. Its pass condition is simple: a response, a log record, an exit status or a scoreboard line.
+- Adding API for tests only, public or private, is forbidden: no function, method, constructor, accessor, `Default` impl or feature flag in production code that only tests call. A `#[cfg(test)]` gate or a `pub(crate)` visibility does not make one acceptable. No production branch that only a test path takes. A generic parameter or a trait that has one production type and a test type is a test seam. Helpers inside a `#[cfg(test)] mod tests` block are test code, not API.
+- If no path from outside reaches a behavior, do not add a hook for it. Test its pure logic in a unit test, or leave it without a test. Drop a test of a sequence that production never runs.
+- Assert on the effect that a client sees, not on internal state such as a counter, a queue or a join handle.
+- A unit test tests one small piece of code in its own scope, in its crate under `#[cfg(test)] mod tests`. It can call private items. It uses no fixture: no file or directory on disk, no socket, no child process or signal, no environment variable and no PHP. It uses no stand-in that copies another rapira component. A value that the test builds in memory as input (a future, an in-memory writer, a waker, a paused tokio clock) is not a fixture.
+- A test that needs a fixture is an e2e test in `crates/tests/tests/e2e/` behind the `e2e` feature, so a workspace run skips it. It spawns the `rapira` binary with the `Spawn` builder in `harness.rs`. A stand-in plugin or a fake PHP is a test double: use a PHP fixture on the real binary. A test that no e2e test can replace is deleted.
+- Shared client code is in `crates/tests/src/`: `wire` (an HTTP/1.1 client that returns `Frame`s) and `server_log` (the JSON log readers). Fixtures are in `crates/tests/fixtures/` and `crates/tests/tests/e2e/fixtures/`. No `testing.rs`, `testdata/` or harness `[dev-dependencies]` in a plugin crate. Never the root package's `tests/`.
+- Do not assert that a port refuses connections after a stop: another process can bind the free port.
+- New tests use worker or dispatcher mode, not classic.
+- Check PHP behavior against php-src or a short script rather than guessing.
+- Use `make build-debug` or `make build-release`. The selected PHP install is under `~/.local/share/php-async/`, with a project symlink at `target/php-async`. Docker and CI build the same PR revision.
+- The container differs from CI: PHP runs as root, and the image lacks some tools. A test can fail there for that reason alone. Run a failing test on `main` in the same container before you report it.
+
+`make test` (test_nts then test_e2e), `make test_nts`, `make test_e2e`, `make coverage`, `make stubs`. All derived from `php-config`, no hardcoded distro paths.
+
+## Dependencies
+
+Prefer `libc` directly over wrappers.
+
+## Docs
+
+- Pre-1.0: no migration framing, no old-to-new tables, no deprecation notes. Docs describe only the current design.
+
+## Known false positives, do not "fix"
+
+- rust-analyzer `E0277: Arguments<'_>: Sync` on `Box::pin` over a `tokio::select!`, while `cargo check` is clean. Cargo is authoritative.
+- Extension visibility differs per CI leg; that is what the `extension_loaded` skip guards are for. Do not edit the test `php.ini`.
+- `.clang-tidy` runs in survey mode, so Zend macro signatures trip `bugprone-*`. No CI job runs it.

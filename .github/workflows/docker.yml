@@ -1,0 +1,97 @@
+name: Docker
+# Reusable: release-please.yml and nightly.yml call it with an explicit ref and
+# version. Tags created with the default GITHUB_TOKEN fire no push triggers.
+on:
+    workflow_call:
+        inputs:
+            ref:
+                description: "Tag or commit to build"
+                type: string
+                required: true
+            version:
+                description: "Image version tag, without the v prefix"
+                type: string
+                required: true
+            alias:
+                description: "Extra moving alias prefix for the merged tags, such as nightly"
+                type: string
+                default: ""
+    workflow_dispatch:
+        inputs:
+            ref:
+                description: "Tag or commit to build"
+                type: string
+                default: main
+            version:
+                description: "Image version tag, without the v prefix"
+                type: string
+                required: true
+
+permissions:
+    contents: read
+
+# Every image uses the PHP PR pinned in .github/php-async.env.
+env:
+    IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+    build:
+        runs-on: ${{ matrix.runner }}
+        timeout-minutes: 60
+        permissions:
+            contents: read
+            packages: write
+        strategy:
+            fail-fast: false
+            matrix:
+                arch: [amd64, arm64]
+                include:
+                    - { arch: amd64, runner: ubuntu-latest }
+                    - { arch: arm64, runner: ubuntu-24.04-arm }
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ inputs.ref }}
+                  persist-credentials: false
+            - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+            - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+            - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+              with:
+                  context: .
+                  target: runtime
+                  push: true
+                  tags: ${{ env.IMAGE }}:${{ inputs.version }}-php-async-${{ matrix.arch }}
+                  cache-from: type=gha,scope=php-async-${{ matrix.arch }}
+                  cache-to: type=gha,mode=max,scope=php-async-${{ matrix.arch }}
+
+    merge:
+        needs: build
+        runs-on: ubuntu-latest
+        timeout-minutes: 15
+        permissions:
+            contents: read
+            packages: write
+        steps:
+            - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+            - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+              with:
+                  registry: ghcr.io
+                  username: ${{ github.actor }}
+                  password: ${{ secrets.GITHUB_TOKEN }}
+            # The release aliases move in the publish job of
+            # release-please.yml after the release is published. The alias input
+            # adds a caller-owned moving alias (nightly).
+            - shell: bash
+              env:
+                  V: ${{ inputs.version }}
+                  ALIAS: ${{ inputs.alias }}
+              run: |
+                  set -euo pipefail
+                  TAGS=(-t "$IMAGE:$V-php-async")
+                  [ -z "$ALIAS" ] || TAGS+=(-t "$IMAGE:$ALIAS-php-async")
+                  docker buildx imagetools create "${TAGS[@]}" \
+                    "$IMAGE:$V-php-async-amd64" "$IMAGE:$V-php-async-arm64"

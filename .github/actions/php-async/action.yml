@@ -1,0 +1,52 @@
+name: Build async PHP
+description: Build the pinned IO hooks PR and select it for Cargo and the tests.
+inputs:
+    profile:
+        description: debug or release
+        required: true
+runs:
+    using: composite
+    steps:
+        - name: Install Linux build dependencies
+          shell: bash
+          run: bash scripts/install-build-deps.sh
+        - name: Set PHP paths
+          id: paths
+          shell: bash
+          env:
+              PROFILE: ${{ inputs.profile }}
+          run: |
+              case "$PROFILE" in debug|release) ;; *) exit 1 ;; esac
+              echo "PHP_SRC=$GITHUB_WORKSPACE/third-party/php-src-async" >> "$GITHUB_ENV"
+              echo "PHP_ROOT=$HOME/.local/share/php-async" >> "$GITHUB_ENV"
+              echo "PHP_PREFIX=$HOME/.local/share/php-async" >> "$GITHUB_ENV"
+              source /etc/os-release
+              echo "platform=$ID-$VERSION_ID" >> "$GITHUB_OUTPUT"
+        - name: Restore async PHP
+          id: cache
+          uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+          with:
+              path: ${{ env.PHP_PREFIX }}
+              key: php-async-${{ steps.paths.outputs.platform }}-${{ runner.arch }}-${{ inputs.profile }}-${{ hashFiles('.github/php-async.env', '.github/php-configure-flags.txt', 'scripts/build-php.sh', '.github/actions/php-async/action.yml') }}
+        - name: Build PR PHP
+          if: steps.cache.outputs.cache-hit != 'true'
+          shell: bash
+          env:
+              PROFILE: ${{ inputs.profile }}
+          run: make "build-php-$PROFILE"
+        - name: Save async PHP
+          if: steps.cache.outputs.cache-hit != 'true'
+          uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+          with:
+              path: ${{ env.PHP_PREFIX }}
+              key: php-async-${{ steps.paths.outputs.platform }}-${{ runner.arch }}-${{ inputs.profile }}-${{ hashFiles('.github/php-async.env', '.github/php-configure-flags.txt', 'scripts/build-php.sh', '.github/actions/php-async/action.yml') }}
+        - name: Select async PHP
+          shell: bash
+          env:
+              PROFILE: ${{ inputs.profile }}
+          run: |
+              make "activate-$PROFILE"
+              echo "$PHP_PREFIX/bin" >> "$GITHUB_PATH"
+              echo "PHP_CONFIG=$GITHUB_WORKSPACE/scripts/php-config" >> "$GITHUB_ENV"
+              echo "LD_LIBRARY_PATH=$PHP_PREFIX/lib" >> "$GITHUB_ENV"
+              make check-php

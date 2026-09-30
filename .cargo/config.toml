@@ -1,0 +1,7 @@
+[env]
+PHP_CONFIG = { value = "scripts/php-config", relative = true, force = true }
+LD_LIBRARY_PATH = { value = "target/php-async/lib", relative = true, force = true }
+
+[target.'cfg(target_os = "linux")']
+# Binaries in target/{debug,release} and test binaries in their deps directory.
+rustflags = ["-C", "link-arg=-Wl,-rpath,$ORIGIN/../php-async/lib:$ORIGIN/../../php-async/lib"]

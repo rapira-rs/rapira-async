@@ -1,0 +1,12 @@
+{
+    "lsp": {
+        "rust-analyzer": {
+            "settings": {
+                "cargo": {
+                    "allTargets": true
+                },
+                "check": { "command": "clippy" }
+            }
+        }
+    }
+}

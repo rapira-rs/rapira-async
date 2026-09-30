@@ -1,0 +1,192 @@
+name: Build binaries
+on:
+    workflow_call:
+        inputs:
+            ref:
+                description: Tag or commit to build
+                type: string
+                required: true
+            version:
+                description: Version for the asset names
+                type: string
+                required: true
+            packages:
+                description: Build deb and rpm packages
+                type: boolean
+                default: true
+            upload_to:
+                description: Release tag for the assets; empty keeps run artifacts
+                type: string
+                default: ""
+            rolling:
+                description: Move the upload tag to the built commit
+                type: boolean
+                default: false
+    workflow_dispatch:
+        inputs:
+            ref:
+                description: Tag or commit to build
+                type: string
+                default: main
+            version:
+                description: Version for the asset names
+                type: string
+                required: true
+            packages:
+                description: Build deb and rpm packages
+                type: boolean
+                default: true
+            upload_to:
+                description: Release tag for the assets; empty keeps run artifacts
+                type: string
+                default: ""
+
+permissions:
+    contents: read
+
+jobs:
+    build:
+        runs-on: ${{ matrix.runner }}
+        container: rockylinux:9@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6
+        timeout-minutes: 90
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - { runner: ubuntu-24.04, arch: x86_64, nfpm_arch: amd64 }
+                    - { runner: ubuntu-24.04-arm, arch: aarch64, nfpm_arch: arm64 }
+        env:
+            STEM: rapira-async-v${{ inputs.version }}-linux-${{ matrix.arch }}
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ inputs.ref }}
+                  persist-credentials: false
+            - uses: ./.github/actions/php-async
+              with: { profile: release }
+            - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+            - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+              with:
+                  cache-on-failure: true
+                  key: php-async-rocky9-${{ hashFiles('.github/php-async.env') }}
+            - run: cargo build --release --locked --bin rapira
+            - name: Assemble Linux archive
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  ROOT="dist/$STEM"
+                  mkdir -p "$ROOT/bin" "$ROOT/lib/rapira-async" "$ROOT/share/php-async"
+                  cp target/release/rapira "$ROOT/bin/rapira"
+                  cp "$PHP_PREFIX/bin/php" "$ROOT/bin/php-async"
+                  cp "$PHP_PREFIX/lib/libphp.so" "$ROOT/lib/rapira-async/"
+                  cp README.md LICENSE "$ROOT/"
+                  cp .github/php-async.env "$ROOT/share/php-async/"
+                  "$PHP_PREFIX/bin/php" -r 'echo PHP_VERSION, "\n";' > "$ROOT/share/php-async/PHP_VERSION.txt"
+                  # ICU and liburing have different package versions across Linux distributions.
+                  mapfile -t LIBS < <(ldd "$PHP_PREFIX/lib/libphp.so" | awk '$1 ~ /^lib(icu|uring)/ {print $3}')
+                  for lib in "${LIBS[@]}"; do cp "$lib" "$ROOT/lib/rapira-async/"; done
+                  for lib in "$ROOT/lib/rapira-async/"*.so*; do patchelf --set-rpath '$ORIGIN' "$lib"; done
+                  for bin in "$ROOT/bin/"*; do patchelf --set-rpath '$ORIGIN/../lib/rapira-async' "$bin"; done
+                  env -u LD_LIBRARY_PATH "$ROOT/bin/rapira" --version
+                  env -u LD_LIBRARY_PATH "$ROOT/bin/php-async" -n scripts/check-php.php
+                  tar -C dist -czf "dist/$STEM.tar.gz" "$STEM"
+            - name: Stage packages
+              if: inputs.packages
+              shell: bash
+              run: |
+                  PR="dist/pkgroot-${{ matrix.nfpm_arch }}"
+                  mkdir -p "$PR/usr/bin" "$PR/usr/lib/rapira-async"
+                  cp "dist/$STEM/bin/"* "$PR/usr/bin/"
+                  cp "dist/$STEM/lib/rapira-async/"*.so* "$PR/usr/lib/rapira-async/"
+            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: art-linux-${{ matrix.arch }}
+                  path: |
+                      dist/*.tar.gz
+                      dist/pkgroot-*
+                  if-no-files-found: error
+                  retention-days: 7
+
+    package:
+        needs: build
+        runs-on: ubuntu-24.04
+        timeout-minutes: 30
+        permissions:
+            contents: write
+        env:
+            VERSION: ${{ inputs.version }}
+            TAG: ${{ inputs.upload_to }}
+            GH_TOKEN: ${{ github.token }}
+            GH_REPO: ${{ github.repository }}
+            NFPM_VERSION: "2.47.0"
+            NFPM_SHA256: "3f1cf344bd0b57373ca55636a78c08b0491f7293d609a456a9ac3b0b150fda97"
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              if: inputs.packages
+              with:
+                  ref: ${{ inputs.ref }}
+                  persist-credentials: false
+            - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with: { path: incoming, pattern: "art-*", merge-multiple: true }
+            - name: Collect archives
+              run: |
+                  mkdir -p dist
+                  cp incoming/*.tar.gz dist/
+            - name: Build deb and rpm packages
+              if: inputs.packages
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  curl -fsSL "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_amd64.deb" -o "$RUNNER_TEMP/nfpm.deb"
+                  echo "${NFPM_SHA256}  $RUNNER_TEMP/nfpm.deb" | sha256sum -c -
+                  sudo dpkg -i "$RUNNER_TEMP/nfpm.deb"
+                  for arch in amd64 arm64; do
+                      rm -rf dist/pkgroot-current
+                      cp -r "incoming/pkgroot-$arch" dist/pkgroot-current
+                      NFPM_ARCH=$arch nfpm pkg -p deb -f nfpm.yaml -t dist/
+                      NFPM_ARCH=$arch nfpm pkg -p rpm -f nfpm.yaml -t dist/
+                  done
+                  rm -rf dist/pkgroot-current
+            - name: Validate amd64 packages
+              if: inputs.packages
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  for deb in dist/*_amd64.deb; do
+                      docker run --rm -v "$PWD/dist:/dist:ro" debian:12 \
+                          bash -ec "apt-get update -q && apt-get install -yq /dist/$(basename "$deb") && rapira --help && php-async -n -r 'new Io\\Ring\\Engine();'"
+                  done
+                  for rpm in dist/*.x86_64.rpm; do
+                      docker run --rm -v "$PWD/dist:/dist:ro" rockylinux:9 \
+                          bash -ec "dnf install -yq /dist/$(basename "$rpm") && rapira --help && php-async -n -r 'new Io\\Ring\\Engine();'"
+                  done
+            - name: Checksums
+              run: (cd dist && sha256sum rapira-async-* > "rapira-async-v${VERSION}-SHA256SUMS.txt")
+            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              if: inputs.upload_to == ''
+              with:
+                  name: dist
+                  path: dist/*
+                  if-no-files-found: error
+            - name: Prepare rolling release
+              if: inputs.rolling
+              env:
+                  SHA: ${{ inputs.ref }}
+              run: gh release view "$TAG" >/dev/null || gh release create "$TAG" --prerelease --target "$SHA" --title "$TAG" --notes "Experimental async PHP build."
+            - name: Upload assets
+              if: inputs.upload_to != ''
+              run: gh release upload "$TAG" dist/* --clobber
+            - name: Move rolling tag and remove old assets
+              if: inputs.rolling
+              env:
+                  SHA: ${{ inputs.ref }}
+              run: |
+                  set -euo pipefail
+                  if ! gh api -X PATCH "repos/$GH_REPO/git/refs/tags/$TAG" -f sha="$SHA" -F force=true >/dev/null; then
+                      gh api -X POST "repos/$GH_REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$SHA" >/dev/null
+                  fi
+                  gh release edit "$TAG" --prerelease --notes "Async PHP build. Version $VERSION. Commit $SHA."
+                  gh release view "$TAG" --json assets --jq '.assets[].name' | while read -r name; do
+                      case "$name" in *"$VERSION"*) continue ;; esac
+                      gh release delete-asset "$TAG" "$name" --yes
+                  done
