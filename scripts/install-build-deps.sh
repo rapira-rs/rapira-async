@@ -14,8 +14,9 @@ else
     "${SUDO[@]}" dnf -y install dnf-plugins-core
     "${SUDO[@]}" dnf config-manager --set-enabled crb
     "${SUDO[@]}" dnf -y install epel-release
+    # The base autoconf package supplies Perl modules omitted by autoconf271.
     "${SUDO[@]}" dnf -y install \
-        gcc gcc-c++ make autoconf bison re2c cmake pkgconf-pkg-config git python3 \
+        gcc gcc-c++ make autoconf autoconf271 bison re2c cmake pkgconf-pkg-config git python3 \
         curl-minimal ca-certificates clang-devel llvm-devel liburing-devel openssl-devel \
         libcurl-devel libxml2-devel oniguruma-devel sqlite-devel zlib-devel \
         libffi-devel libicu-devel libpq-devel patchelf procps-ng tar gzip xz

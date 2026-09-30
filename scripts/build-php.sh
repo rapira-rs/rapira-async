@@ -15,6 +15,11 @@ case "${2:-}" in
     *) echo "Unknown build option: $2" >&2; exit 1 ;;
 esac
 test "$(uname -s)" = Linux || { echo 'rapira-async requires Linux' >&2; exit 1; }
+# Rocky Linux 9 ships the required Autoconf separately from its system 2.69.
+if [ -x /opt/rh/autoconf271/bin/autoconf ]; then
+    export PHP_AUTOCONF=${PHP_AUTOCONF:-/opt/rh/autoconf271/bin/autoconf}
+    export PHP_AUTOHEADER=${PHP_AUTOHEADER:-/opt/rh/autoconf271/bin/autoheader}
+fi
 PHP_SRC=$(realpath -m "${PHP_SRC:-$ROOT/../../third-party/php-src-async}")
 PHP_ROOT=$(realpath -m "${PHP_ROOT:-$HOME/.local/share/php-async}")
 PREFIX="$PHP_ROOT"

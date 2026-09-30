@@ -12,7 +12,7 @@ sudo apt-get install build-essential autoconf bison re2c cmake pkg-config git \
     libxml2-dev libonig-dev libsqlite3-dev zlib1g-dev libffi-dev libicu-dev libpq-dev
 ```
 
-The build requires liburing 2.2 or newer. `ior` also builds its thread backend, which works when the kernel cannot use io_uring.
+The build requires Autoconf 2.71 or newer and liburing 2.2 or newer. `scripts/install-build-deps.sh` installs the dependencies on Debian/Ubuntu and Rocky Linux 9; on Rocky, the PHP build selects the separate `autoconf271` tools. `ior` also builds its thread backend, which works when the kernel cannot use io_uring.
 
 ## Build and editor
 
@@ -56,3 +56,7 @@ docker run --rm --network host -v "$PWD/examples:/app:ro" rapira-async serve /ap
 ```
 
 The Docker image contains the release PHP install at `/root/.local/share/php-async`. It includes the PHP CLI and Rapira. Published images use `-php-async` tags. Linux archives and packages contain the same PR build.
+
+## Releases
+
+Use Conventional Commits: `fix: ...` and `feat: ...` trigger a release pull request. A history containing only `chore: ...` commits (including dependency updates) does not. Re-running the Release workflow does not force a release. Merge the generated release pull request to build and publish its artifacts.
