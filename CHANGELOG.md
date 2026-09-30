@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.2](https://github.com/rapira-rs/rapira-async/compare/v0.8.1...v0.8.2) (2026-09-30)
+
+
+### Bug Fixes
+
+* **ci:** publish x86_64 release artifacts only ([3282a87](https://github.com/rapira-rs/rapira-async/commit/3282a87490fc169a78d99aeaabd7f6e310b9b44f))
+* **ci:** use Autoconf 2.71 for Rocky PHP builds ([97da44e](https://github.com/rapira-rs/rapira-async/commit/97da44e6b9b73599375e793d4d9d4c8e9b16cb6d))
+
 ## [0.8.1](https://github.com/rapira-rs/rapira/compare/v0.8.0...v0.8.1) (2026-09-05)
 
 ### 🎯 Core
