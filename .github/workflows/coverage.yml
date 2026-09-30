@@ -23,7 +23,7 @@ jobs:
             - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
               with: { components: llvm-tools-preview }
             - uses: taiki-e/install-action@ab4220e067fa624f7930084426dbfb7440a52829 # cargo-llvm-cov
-            - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+            - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
               with:
                   cache-on-failure: true
                   key: php-async-coverage-${{ hashFiles('.github/php-async.env') }}
