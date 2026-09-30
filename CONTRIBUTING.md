@@ -57,6 +57,8 @@ docker run --rm --network host -v "$PWD/examples:/app:ro" rapira-async serve /ap
 
 The Docker image contains the release PHP install at `/root/.local/share/php-async`. It includes the PHP CLI and Rapira. Published images use `-php-async` tags. Linux archives and packages contain the same PR build.
 
+Release and nightly archives, packages, and container images target Linux x86_64/amd64.
+
 ## Releases
 
 Use Conventional Commits: `fix: ...` and `feat: ...` trigger a release pull request. A history containing only `chore: ...` commits (including dependency updates) does not. Re-running the Release workflow does not force a release. Merge the generated release pull request to build and publish its artifacts.

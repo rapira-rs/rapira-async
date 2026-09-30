@@ -1,7 +1,6 @@
 # deb/rpm packaging config for nFPM (https://nfpm.goreleaser.com).
-# Invoked once per NFPM_ARCH by build-binaries.yml;
-# nfpm expands ${VAR} from the environment. arch amd64/arm64 maps to
-# rpm x86_64/aarch64 automatically.
+# Invoked with NFPM_ARCH=amd64 by build-binaries.yml.
+# nfpm expands ${VAR} from the environment; amd64 maps to rpm x86_64.
 name: "rapira-async"
 arch: "${NFPM_ARCH}"
 platform: "linux"

@@ -54,7 +54,6 @@ jobs:
             matrix:
                 include:
                     - { runner: ubuntu-24.04, arch: x86_64, nfpm_arch: amd64 }
-                    - { runner: ubuntu-24.04-arm, arch: aarch64, nfpm_arch: arm64 }
         env:
             STEM: rapira-async-v${{ inputs.version }}-linux-${{ matrix.arch }}
         steps:
@@ -140,12 +139,10 @@ jobs:
                   curl -fsSL "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_amd64.deb" -o "$RUNNER_TEMP/nfpm.deb"
                   echo "${NFPM_SHA256}  $RUNNER_TEMP/nfpm.deb" | sha256sum -c -
                   sudo dpkg -i "$RUNNER_TEMP/nfpm.deb"
-                  for arch in amd64 arm64; do
-                      rm -rf dist/pkgroot-current
-                      cp -r "incoming/pkgroot-$arch" dist/pkgroot-current
-                      NFPM_ARCH=$arch nfpm pkg -p deb -f nfpm.yaml -t dist/
-                      NFPM_ARCH=$arch nfpm pkg -p rpm -f nfpm.yaml -t dist/
-                  done
+                  rm -rf dist/pkgroot-current
+                  cp -r incoming/pkgroot-amd64 dist/pkgroot-current
+                  NFPM_ARCH=amd64 nfpm pkg -p deb -f nfpm.yaml -t dist/
+                  NFPM_ARCH=amd64 nfpm pkg -p rpm -f nfpm.yaml -t dist/
                   rm -rf dist/pkgroot-current
             - name: Validate amd64 packages
               if: inputs.packages
