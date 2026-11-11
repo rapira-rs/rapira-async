@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # PHP is built from https://github.com/php/php-src/pull/23997.
 # .github/php-async.env pins the same revision used by Make and CI.
-FROM rust:1-trixie@sha256:a8a5f0a1e5fe7dfe1d352591e4a1c7dd2c08fd70475cae872cf3458ba0df0546 AS builder
+FROM rust:1-trixie@sha256:8a4e90c7946b74626488b1446f712c0fe0ed1a596cbd3d871684bc9c5433ae07 AS builder
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 WORKDIR /src
